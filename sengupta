@@ -1,0 +1,8 @@
+Use FIA full dataset (eastern US forest)
+
+Conduct EDA
+Calculate species richness (sr) at grid level
+Calculate average sr aggregated at the latitudinal band
+Calculate the moving average at 0.5 degree interval
+Estimate the SR using bootstrapping methods (1000 times simulation) and report mean and std. sr
+Present your work using ggplot
