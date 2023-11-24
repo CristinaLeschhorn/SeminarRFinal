@@ -1,0 +1,614 @@
+library(readr)
+library(sf)
+library(dplyr)
+library(ggplot2)
+library(readr)
+
+fia <- read_csv("tree data/tree_raw_data_with_env_cleaned.csv")
+options(scipen = 999)
+head(fia)
+nrow(fia)
+length(unique(fia$TREEcn))
+names(fia)
+
+dup <- fia %>%
+  group_by(TREEcn)%>%
+  arrange(TREEcn)%>%
+  filter(n()>1)
+head(dup)
+
+fia10 <- fia %>%
+  sample_frac(0.1) %>%
+  select(X, TREEcn, plt_cn,  invyr,  statecd, spcd, dia, ht, lat, long)
+head(fia10)
+
+fia <- fia10
+
+fia_sf <- st_as_sf(fia, coords = c("long", "lat"), crs = 4326)
+class(fia_sf)
+head(fia_sf)
+summary(fia_sf)
+plot(st_geometry(fia_sf),cex = 0.2)
+fia_sf_albers <- st_transform(fia_sf, crs = "ESRI:102008")
+st_crs(fia_sf_albers)
+plot(st_geometry(fia_sf_albers))
+head(fia_sf_albers)
+extent <- st_bbox(fia_sf_albers)
+extent
+
+grid <- st_make_grid(st_as_sfc(extent), crs = "ESRI:102008", cellsize = c(20000,20000), square = TRUE)
+plot(grid)
+class(grid)
+grid_sf <- st_sf(id = 1:length(grid), geometry = grid)
+class(grid_sf)
+head(grid_sf)
+
+overlaps <- st_join(fia_sf_albers, grid_sf)
+class(overlaps)
+head(overlaps)
+centroids_albers <- st_centroid(grid_sf$geometry)
+head(overlaps)
+summary(overlaps)
+length(overlaps$id)
+length(unique(overlaps$id))
+id1 <- unique(overlaps$id)
+id1
+
+centroids_albers <- st_centroid(grid_sf[grid_sf$id %in% id1,]$geometry)
+length(centroids_albers)
+class(centroids_albers)
+length(centroids_albers)
+head(centroids_albers)
+head(overlaps)
+centroids_wgs84 <- st_transform(centroids_albers, crs = 4326)
+head(centroids_wgs84)
+summary(centroid_wgs84_coords)
+
+class(centroids_wgs84)
+centroid_wgs84_coords <- st_coordinates(centroids_wgs84)
+summary(centroid_wgs84_coords)
+nrow(centroid_wgs84_coords[is.na(centroid_wgs84_coords["X"]),])
+
+
+class(centroid_wgs84_coords)
+
+gridid <- grid_sf[grid_sf$id %in% id1,]$id
+class(gridid)
+id1
+nrow(centroid_wgs84_coords)
+length(gridid)
+
+head(centroid_wgs84_coords)
+
+centroid_df <- data.frame(
+  GRIDID = id1,
+  centroid_long = centroid_wgs84_coords[,"X"],
+  centroid_lat = centroid_wgs84_coords[,"Y"]
+)
+head(centroid_df)
+
+summary(centroid_df)
+head(fia)
+head(overlaps)
+table(unique(overlaps$id) %in% centroid_df$GRIDID)
+fia_grid <- merge(overlaps, centroid_df, by.x = "id", by.y = "GRIDID", all.x = TRUE)
+head(fia_grid)
+
+summary(fia_grid)
+nrow(fia_grid)
+
+length(unique(fia_grid$X))
+length(unique(fia_grid$TREEcn))
+
+head(fia_grid)
+length(unique(fia_grid$id))
+
+#########
+fia_grid_df <- as.data.frame(fia_grid)
+class(fia_grid_df)
+head(fia_grid_df)
+ref<-REF
+head(ref)
+
+fia_grid_df1 <- merge(fia_grid_df, ref, by.x = "spcd", by.y = "SPCD", all.x = TRUE)
+summary(fia_grid_df1)
+fia_grid_df <- fia_grid_df1
+str(fia_grid_df)
+summary(fia_grid_df)
+nrow(fia_grid_df[is.na(fia_grid_df["centroid_long"]),])
+
+fia_grid_total_count <- fia_grid_df %>%
+  group_by(id, centroid_long, centroid_lat) %>%
+  summarise(Total_tree_count = n_distinct(X)) %>%
+  arrange(id)
+head(fia_grid_total_count)
+head(fia_grid_df)
+
+fia_grid_spcd_tree_count <- fia_grid_df %>%
+  group_by(id, spcd, COMMON_NAME, centroid_long, centroid_lat) %>%
+  summarise(SPCD_tree_count = n_distinct(X))
+
+head(fia_grid_total_count)
+nrow(fia_grid_total_count)
+head(fia_grid_spcd_tree_count, 30)
+fia_grid_spcd_tree_count[1:30,]
+
+fia_grid_frequency <- merge(fia_grid_spcd_tree_count, fia_grid_total_count, by = "id", all.x = TRUE)
+head(fia_grid_frequency)
+fia_grid_frequency <- fia_grid_frequency %>%
+  mutate(frequency = SPCD_tree_count/Total_tree_count * 100)
+
+head(fia_grid_frequency)
+```
+
+```{r}
+common_name <- unique(fia_grid_frequency$COMMON_NAME)
+common_name <- tolower(common_name)
+common_name <- gsub("\\s+", "", common_name)
+sort(common_name)
+
+ggplot(data = fia_grid_frequency[fia_grid_frequency$COMMON_NAME == "loblolly pine",]) +
+  geom_point(aes(x = centroid_long.x, y = centroid_lat.x, color = frequency))
+
+######
+percent_frequency <- function(species_name){
+  ggplot(data = fia_grid_frequency[fia_grid_frequency$COMMON_NAME == species_name,]) +
+    geom_point(aes(x = centroid_long.x, y = centroid_lat.x, color = frequency))
+}
+percent_frequency("willow oak")
+```
+
+```{r}
+
+
+######
+percent_frequency <- function(datainput,species_name){
+  fia_grid <- datainput
+  fia_grid_df <- as.data.frame(fia_grid)
+  fia_grid_df1 <- merge(fia_grid_df, ref, by.x = "spcd", by.y = "SPCD", all.x = TRUE)
+  fia_grid_df <- fia_grid_df1
+head(fia_grid_df1)
+  fia_grid_total_count <- fia_grid_df %>%
+    group_by(id, centroid_long, centroid_lat) %>%
+    summarise(Total_tree_count = n_distinct(X)) %>%
+    arrange(id)
+
+  fia_grid_spcd_tree_count <- fia_grid_df %>%
+    group_by(id, spcd, COMMON_NAME, centroid_long, centroid_lat) %>%
+    summarise(SPCD_tree_count = n_distinct(X))
+  
+  fia_grid_frequency <- merge(fia_grid_spcd_tree_count, fia_grid_total_count, by = "id", all.x = TRUE)
+  fia_grid_frequency <- fia_grid_frequency %>%
+    mutate(frequency = SPCD_tree_count/Total_tree_count * 100)
+  
+  p <- ggplot(data = fia_grid_frequency[fia_grid_frequency$COMMON_NAME == species_name,]) +
+    geom_point(aes(x = centroid_long.x, y = centroid_lat.x, color = frequency))
+  return(p)
+}
+
+head(fia_grid)
+head(fia_grid_frequency)
+percent_frequency(fia_grid, "red maple")
+```
+
+```{r}
+p <- ggplot(data = fia_grid_frequency[fia_grid_frequency$COMMON_NAME == "slash pine",]) +
+    geom_point(aes(x = centroid_long.x, y = centroid_lat.x, color = frequency))
+p
+```
+
+```{r}
+
+##### for loop ####
+numbers <- c(1:10)
+numbers
+1+2+3+4
+
+
+
+sum <- 0
+for (i in 1:10){
+  sum <- sum + i
+}
+print(sum)
+
+original_vector <- c(1,2,3,4,5)
+double_vector <- numeric(length(original_vector))
+numeric(5)
+class(double_vector)
+
+for (i in 1:length(original_vector)){
+  double_vector[i] <- original_vector[i] * 2
+}
+
+print(double_vector)
+
+words <- c("Hello", "World", "in", "R")
+words
+result <- ""
+for (word in words){
+  result <- paste(result, word)
+}
+print(result)
+
+a <- 5
+b <- 7
+if (a < b){
+  print(a)
+}
+
+if (a < b){
+  print(a)
+} else {
+  print(b)
+}
+```
+
+```{r}
+### for loop to calculate the average frequency at species level
+head(fia_grid_frequency)
+
+fia_grid_frequency1 <- fia_grid_frequency %>%
+  filter(COMMON_NAME == 'willow oak') %>%
+  summarise(average_frequency = mean(frequency))
+
+head(fia_grid_frequency1)
+head(fia_grid_df)
+nrow(fia_grid_df)
+head(fia_grid_spcd_tree_count)
+head(fia_grid_total_count)
+######
+fia_grid_total_count <- fia_grid_df %>%
+  group_by(id) %>%
+  summarise(Total_tree_count = n_distinct(X)) %>%
+  ungroup()
+
+head(fia_grid_total_count)
+fia_grid_spcd_tree_count <- fia_grid_df %>%
+  group_by(id, spcd, COMMON_NAME) %>%
+  summarise(SPCD_tree_count = n_distinct(X))
+
+fia_grid_frequency <- merge(fia_grid_spcd_tree_count, fia_grid_total_count, by = "id", all.x = TRUE)
+fia_grid_frequency <- fia_grid_frequency %>%
+  mutate(frequency = SPCD_tree_count/Total_tree_count * 100)
+
+mean(fia_grid_frequency$frequency)
+class(fia_grid_frequency1)
+class(fia_grid_frequency1$average_frequency)
+
+
+
+avg_frequency_species <- function(common_name) {
+  fia_grid_frequency1 <- fia_grid_frequency %>%
+  filter(COMMON_NAME == common_name) %>%
+  summarise(average_frequency = mean(frequency))
+  return(fia_grid_frequency1$average_frequency)
+}
+avg_frequency_species("red maple")
+
+unique(fia_grid_frequency$COMMON_NAME)[1:5]
+```
+
+```{r}
+######
+head(fia_grid_frequency)
+
+avg_frequency_species <- function(common_name) {
+  fia_grid_frequency1 <- fia_grid_frequency %>%
+    filter(COMMON_NAME == common_name) %>%
+    summarise(average_frequency = mean(frequency))
+  return(fia_grid_frequency1$average_frequency)
+}
+
+spcd_frequency <- numeric(0)
+spcd_frequency
+a <- 1
+b <- 2
+a <- c(a,b)
+a
+spcd <- character(0)
+spcd
+for (i in unique(fia_grid_frequency$COMMON_NAME)[1:5]){
+#  print(i)
+  spcd_frequency <- c(spcd_frequency, avg_frequency_species(i))
+  spcd <- c(spcd,i)
+}
+spcd_frequency
+spcd
+df <- data.frame(spcd = spcd, avg_freq = spcd_frequency)
+df[1,1]
+df[1,2]
+df[2,1]
+df[2,2]
+df[3,1]
+df[3,2]
+1:length(unique(fia_grid_frequency$COMMON_NAME))
+#### create a empty data frame
+df <- data.frame(matrix(ncol = 2, nrow = length(unique(fia_grid_frequency$COMMON_NAME))))
+df
+
+for (i in 1:length(unique(fia_grid_frequency$COMMON_NAME))){
+  common_name <- unique(fia_grid_frequency$COMMON_NAME)[i]
+  df[i,1] <- common_name
+  df[i,2] <- avg_frequency_species(common_name)
+}
+df
+colnames(df) <- c("common name","average frequency")
+head(df)
+head(mtcars)
+
+
+library(gridExtra)
+plot_list <- list()
+plot_list
+
+for (i in 1:length(unique(fia_grid_frequency$COMMON_NAME))){
+  common_name <- unique(fia_grid_frequency$COMMON_NAME)[i]
+  p <- ggplot(data = fia_grid_frequency[fia_grid_frequency$COMMON_NAME == common_name,]) +
+    geom_point(aes(x = centroid_long.x, y = centroid_lat.x, color = frequency))
+  plot_list[[i]] <- p
+}
+length(plot_list)
+plot_list
+library(ggpubr)
+multipage <- ggarrange(plotlist = plot_list, ncol = 3, nrow = 3)
+ggexport(multipage, filename = "test1.pdf")
+```
+
+```{r}
+
+#### if statement ######
+fruits <- c("apple", "banana", "cherry")
+fruits[3]
+
+search_fruit <- "apple"
+
+find_fruit <- function(search_fruit){
+  if (search_fruit %in% fruits){
+    print(paste("I Found", search_fruit))  
+  } else{
+    print(paste(search_fruit,"NOT Found"))
+  }
+}
+
+find_fruit("kiwi")
+
+score <- 80
+
+if (score >= 90){
+  print("A")
+}else if (score >= 80){
+    print("B")
+}else if (score >= 70){
+  print("C")
+}else {
+  print("F")
+}
+
+?ifelse
+ifelse(score >=90,"A","Not A")
+score <- 60
+ifelse(score >=90, print("A"), ifelse(score >= 80, "B", ifelse(score >= 70, "C", "F")))
+ifelse(score >= 90, "A",print("a, b"))
+print("a","b")
+c(1,2,3)
+
+```
+
+```{r}
+#Importance Value
+
+head(fia_grid_df)
+summary(fia_grid_df) 
+nrow(fia_grid_df)
+
+options(scipen = 9999) # come back
+tree_count_per_plot <- fia_grid_df %>% 
+  filter(!is.na(dia)) %>%
+  group_by(plt_cn) %>%
+  summarise(treeCount = n_distinct(X))
+head(tree_count_per_plot)
+
+tree_count_per_plot_per_spcd <- fia_grid_df %>% 
+  filter(!is.na(dia)) %>%
+  group_by(plt_cn, spcd, COMMON_NAME) %>%
+  summarise(treeCount_spcd = n_distinct(X))
+head(tree_count_per_plot_per_spcd)
+
+rel_frequency <- merge(tree_count_per_plot_per_spcd, tree_count_per_plot, by = "plt_cn", all.x = TRUE)
+head(rel_frequency)
+rel_frequency$rel_frequency <- rel_frequency$treeCount_spcd / rel_frequency$treeCount * 100
+head(rel_frequency)
+
+fia_grid_df1 <- fia_grid_df
+fia_grid_df1$BA <- fia_grid_df1$dia^2 * 0.005454
+head(fia_grid_df1)
+
+ba_per_plot <- fia_grid_df1 %>%
+  filter(!is.na(dia)) %>%
+  group_by(plt_cn) %>%
+  summarise(ba_sum = sum(BA))
+head(ba_per_plot)
+
+ba_per_plot_per_spcd <- fia_grid_df1 %>%
+  filter(!is.na(dia)) %>%
+  group_by(plt_cn, spcd, COMMON_NAME) %>%
+  summarise(ba_sum_spcd = sum(BA))
+head(ba_per_plot_per_spcd)
+
+rel_dominance <- merge(ba_per_plot_per_spcd, ba_per_plot, by = "plt_cn", all.x = TRUE)
+head(rel_dominance)
+rel_dominance$rel_dominance <- rel_dominance$ba_sum_spcd / rel_dominance$ba_sum * 100
+head(rel_dominance)
+
+nrow(rel_frequency)
+nrow(rel_dominance)
+iv <- merge(rel_dominance, rel_frequency, by = c("plt_cn","spcd"))     
+nrow(iv)
+head(iv)
+iv$IV <- (iv$rel_dominance + iv$rel_frequency)/2
+head(iv)
+
+lat_seq <- seq(from = 32, to = 49, by = 0.5)
+lat_seq
+for (i in lat_seq) {
+  print(i)
+}
+```
+
+```{r}
+#adding latitude to IV dataframe
+IV_lat_merge<-merge(iv,fia_grid_df1,by = "plt_cn", all.x = TRUE)
+head(IV_lat_merge)
+iv_lat<-IV_lat_merge%>%
+  select(centroid_lat,plt_cn,spcd.x,COMMON_NAME,IV,rel_dominance,rel_frequency)
+head(iv_lat)
+View(iv_lat)
+```
+
+```{r}
+###calculating avg species IV for lat band 33
+
+iv_lat$centroid_lat
+max(iv_lat$centroid_lat)
+min(iv_lat$centroid_lat)
+#rounding lat bands
+
+iv_lat$round_lat <- ifelse(iv_lat$centroid_lat > 24.5 & iv_lat$centroid_lat <= 25.5, 25,
+                           ifelse(iv_lat$centroid_lat > 25.5 & iv_lat$centroid_lat <= 26.5, 26,
+  
+                                  ifelse(iv_lat$centroid_lat > 26.5 & iv_lat$centroid_lat <= 27.5, 27,
+  
+                                         
+                                         ifelse(iv_lat$centroid_lat > 27.5 & iv_lat$centroid_lat <= 28.5, 28,
+  
+                                                ifelse(iv_lat$centroid_lat > 28.5 & iv_lat$centroid_lat <= 29.5, 29,
+  
+                                                       ifelse(iv_lat$centroid_lat > 29.5 & iv_lat$centroid_lat <= 30.5, 30,
+  
+                                                              ifelse(iv_lat$centroid_lat > 30.5 & iv_lat$centroid_lat <= 31.5, 31,
+  
+                                                                     ifelse(iv_lat$centroid_lat > 31.5 & iv_lat$centroid_lat <= 32.5, 32,
+                    
+                                                                            ifelse(iv_lat$centroid_lat > 32.5 & iv_lat$centroid_lat <= 33.5, 33,
+                    
+                                                                                   ifelse(iv_lat$centroid_lat > 32.5 & iv_lat$centroid_lat <= 33.5, 33,
+                    
+                                                                                          ifelse(iv_lat$centroid_lat > 33.5 & iv_lat$centroid_lat <= 34.5,34,
+                    
+                                                                                                 ifelse(iv_lat$centroid_lat > 34.5 & iv_lat$centroid_lat <= 35.5, 35,
+                    
+                                                                                                        ifelse(iv_lat$centroid_lat > 35.5 & iv_lat$centroid_lat <= 36.5,36, 
+                   
+                                                                                                                ifelse(iv_lat$centroid_lat > 36.5 & iv_lat$centroid_lat <= 37.5, 37,
+                    
+                                                                                                                       ifelse(iv_lat$centroid_lat > 37.5 & iv_lat$centroid_lat <= 38.5, 38,
+                    
+                                                                                                                              ifelse(iv_lat$centroid_lat > 38.5 & iv_lat$centroid_lat <= 39.5, 39,
+                    
+                                                                                                                                     ifelse(iv_lat$centroid_lat > 39.5 & iv_lat$centroid_lat <= 40.5, 40,
+                   
+                                                                                                                                             ifelse(iv_lat$centroid_lat > 40.5 & iv_lat$centroid_lat <= 41.5, 41,
+                    
+                                                                                                                                                    ifelse(iv_lat$centroid_lat > 41.5 & iv_lat$centroid_lat <= 42.5, 42,
+                    
+                                                                                                                                                           ifelse(iv_lat$centroid_lat > 42.5 & iv_lat$centroid_lat <= 43.5, 43,
+                    
+                                                                                                                                                                  ifelse(iv_lat$centroid_lat > 43.5 & iv_lat$centroid_lat <= 44.5, 44,
+                    
+                                                                                                                                                                         ifelse(iv_lat$centroid_lat > 44.5 & iv_lat$centroid_lat <= 45.5, 45,
+                    
+                                                                                                                                                                                ifelse(iv_lat$centroid_lat > 45.5 & iv_lat$centroid_lat <= 46.5, 46,
+                    
+                                                                                                                                                                                       ifelse(iv_lat$centroid_lat > 46.5 & iv_lat$centroid_lat <= 47.5, 47,
+                    
+                                                                                                                                                                                              ifelse(iv_lat$centroid_lat > 47.5 & iv_lat$centroid_lat <= 48.5, 48,
+                    
+                                                                                                                                                                                                     ifelse(iv_lat$centroid_lat > 48.5 & iv_lat$centroid_lat <= 49.5, 49,
+                          
+                                                                                                                                                                                                             iv_lat$centroid_lat))))))))))))))))))))))))))
+
+# Print the original and rounded values
+print(iv_lat)
+
+#rearranging columns
+iv_lat<-iv_lat%>%
+  select(centroid_lat,round_lat,plt_cn,COMMON_NAME,IV,spcd.x,rel_dominance,rel_frequency)
+head(iv_lat)
+```
+
+```{r}
+#filtering and averaging iv per species for lat band 33
+iv_lat_33<-iv_lat%>%
+  filter(round_lat==33)%>%
+  group_by(round_lat,COMMON_NAME)%>%
+  summarise(avg_iv_per_species=mean(IV))%>%
+  mutate(avg_iv_per_species)
+View(iv_lat_33)
+```
+
+```{r}
+##creating a for loop for all lat bands
+
+result_df <- data.frame()
+
+
+for (i in 1:length(unique(iv_lat$round_lat))){
+  for (j in 1:length(unique(iv_lat$COMMON_NAME)))
+{
+  lat_values <- unique(iv_lat$round_lat)[i]
+  species<-unique(iv_lat$COMMON_NAME)[j]
+  
+iv_per_species_per_lat<- iv_lat %>% 
+  filter(round_lat == lat_values)%>%
+  group_by(round_lat, COMMON_NAME) %>%
+    summarise(avg_iv_per_species = mean(IV))
+  
+  
+  result_df <-iv_per_species_per_lat
+}
+}
+View(result_df)
+nrow(result_df)
+```
+
+```{r}
+plot_iv_list <- list()
+plot_iv_list
+
+for (i in 1:length(unique(result_df$round_lat))) {
+  lat_band <- unique(result_df$round_lat)[i]
+  
+  for (j in 1:length(unique(result_df$COMMON_NAME))) {
+    species <- unique(result_df$COMMON_NAME)[j]
+    
+    p <- ggplot(data = result_df[result_df$round_lat == lat_band & result_df$COMMON_NAME == species,]) +
+      geom_point(aes(x = COMMON_NAME, y = round_lat))
+    
+    plot_iv_list[[i*j]] <- p
+  }
+}
+length(plot_iv_list)
+plot_iv_list
+
+```
+
+```{r}
+plot_iv_list_2 <- list()
+plot_iv_list_2
+
+for (i in 1:length(unique(result_df$COMMON_NAME))) {
+  species2 <- unique(result_df$COMMON_NAME)[i]
+
+    
+    p2 <- ggplot(data = result_df[result_df$COMMON_NAME==species2,]) +
+      geom_point(aes(x = avg_iv_per_species, y = round_lat))
+    
+    plot_iv_list_2[[i*j]] <- p2
+  }
+
+
+
+length(plot_iv_list_2)
+plot_iv_list_2
+```
