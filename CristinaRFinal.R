@@ -1,2 +1,40 @@
-"hello"
-a <- 5
+## Nov 21 class :P
+
+
+#exercise for loop to do moving average
+#use cleaned up fia_df data frame
+min(fia_df$centroid_lat)
+max(fia_df$centroid_lat)
+?seq
+seq(from = 25, to = 50)
+seq(from = 25, to = 50, by = 0.5)
+myseq <- seq(from = 25, to = 50, by = 0.5)
+for (i in myseq){
+  print(i+1)
+}
+
+myseq
+lat_min <- myseq[2] - 0.5
+lat_min
+lat_max <- myseq[2] + 0.5
+lat_max
+length(myseq)
+length(myseq)
+
+sr_bands <- data.frame(matrix(ncol = 2, nrow = length(myseq)))
+names(sr_bands) <- c("LatBands","SR")
+sr_bands
+
+for (i in 1:length(myseq)){
+  lat_min <- myseq[i] - 0.5
+  lat_max <- myseq[i] + 0.5
+  fia_df_subset <- fia_df %>%
+    filter(centroid_lat > lat_min & centroid_lat <= lat_max)
+  sr <- length(unique(fia_df_subset$COMMON_NAME))
+  sr_bands[i,1] <- myseq[i]
+  sr_bands[i,2] <- sr
+}
+
+sr_bands
+ggplot(data = sr_bands, aes(x = LatBands, y = SR)) +
+  geom_point()
