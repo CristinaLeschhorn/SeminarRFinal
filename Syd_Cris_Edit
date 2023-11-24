@@ -1,0 +1,45 @@
+library(dplyr)
+library(usethis)
+use_git_config(user.name = "sjbltran", user.email = "sydneybeltran10@gmail.com")
+
+#Use FIA full dataset (eastern US forest)
+
+# Conduct EDA
+# Calculate species richness (sr) at grid level
+# Calculate average sr aggregated at the latitudinal band
+# Calculate the moving average at 0.5 degree interval
+# Estimate the SR using bootstrapping methods (1000 times simulation) and report mean and std. sr
+# Present your work using ggplot
+
+
+## Calculate species richness (sr) at grid level
+
+fia_grid_df <- read.csv("E:/Grad/R_Seminar/R_Seminar/Data/fia_grid_df.csv")
+tree_count_per_id <- fia_grid_df %>%
+  group_by(id, centroid_long, centroid_lat) %>%
+  summarise(treecount_id = n_distinct(X))
+head(tree_count_per_id)  
+
+tree_count_per_spcd <- fia_grid_df %>%
+  group_by(spcd, SPECIES, id) %>%
+  summarise(treecount_spcd = n_distinct(X))
+head(tree_count_per_spcd)
+
+species_rich <- merge(tree_count_per_id, tree_count_per_spcd, by = "id", all.x = TRUE)
+
+species_richness1 <- species_rich %>%
+  group_by(SPECIES, id) %>%
+  summarise(richness = n_distinct(spcd)) %>%
+  arrange(-richness)
+head(species_richness1)
+
+species_richness <- function(species) {
+  df <- species_rich %>%
+    filter(SPECIES == species) %>%
+    group_by(id) %>%
+    summarise(richness = n_distinct(spcd)) %>%
+    arrange(-richness)
+  return(df)
+}
+
+species_richness("balsam fir")
