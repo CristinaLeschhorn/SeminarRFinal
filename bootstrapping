@@ -1,0 +1,54 @@
+select_tree_species <- function(latitude_band) {
+  selected_species <- sample(tree_species, 200, replace = TRUE)
+  return(data.frame(Latitude_Band = latitude_band, Tree_Species = selected_species))
+}
+
+# Set the number of latitude bands and iterations
+num_latitude_bands <- 10
+num_iterations <- 1000
+
+# Create an empty data frame to store the results
+result_df <- data.frame()
+
+# Loop through latitude bands
+for (i in 1:num_latitude_bands) {
+  latitude_band <- paste("Latitude", i)
+  
+  # Repeat the selection process for the specified number of iterations
+  for (j in 1:num_iterations) {
+    result_df <- rbind(result_df, select_tree_species(latitude_band))
+  }
+}
+
+# Print the resulting data frame
+print(result_df)
+```
+
+```{r}
+num_iterations <- 1000
+
+# Function to calculate species richness from a vector of counts
+calculate_sr <- function(counts) {
+  sum(counts > 0)
+}
+
+# Function to perform bootstrap sampling and calculate SR
+bootstrap_sr <- function(sr_bands) {
+  indices <- 1:nrow(sr_bands)
+  bootstrapped_samples <- matrix(sample(indices, replace = TRUE), nrow = nrow(sr_bands), ncol = ncol(sr_bands))
+  
+  bootstrapped_srs <- apply(bootstrapped_samples, 1, function(sample_indices) {
+    calculate_sr(sr_bands[sample_indices, ])
+  })
+  
+  return(bootstrapped_srs)
+}
+
+# Perform bootstrapping
+bootstrap_results <- replicate(num_iterations, bootstrap_sr(sr_bands))
+
+# Calculate mean and standard deviation of SR
+mean_sr <- mean(bootstrap_results)
+std_sr <- sd(bootstrap_results)
+mean_sr
+std_sr
