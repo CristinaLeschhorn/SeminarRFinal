@@ -84,3 +84,24 @@ scatter_plot_ht_dia_facetwrap
 
 
 
+
+
+
+#na distribution grouped by state
+#na ggplot grouped by state
+na_distribution_by_state <- tree_raw_common %>%
+  group_by(statename) %>%
+  select(spcd,common,dia,ht)%>%
+  summarize(across(everything(), ~ sum(is.na(.))))
+na_distribution_by_state
+
+ggplot(na_distribution_by_state, aes(x = statename)) +
+  geom_bar(aes(y = dia), stat = "identity", fill = "blue", alpha = 0.8) +
+  geom_bar(aes(y = ht), stat = "identity", fill = "green", alpha = 0.4) +
+  labs(title = "NA Distribution of 'dia' and 'ht' by State",
+       x = "State",
+       y = "Count of NA values") +
+  scale_fill_manual(values = c("blue", "green")) +
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
