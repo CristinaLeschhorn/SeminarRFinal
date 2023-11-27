@@ -1,0 +1,312 @@
+---
+title: "sr"
+format: html
+editor: visual
+---
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+## Running Code
+
+When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+
+```{r}
+1 + 1
+```
+
+You can add options to executable code like this
+
+```{r}
+#| echo: false
+2 * 2
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).
+
+```{r}
+library(readr)
+library(dplyr)
+library(sf)
+library(ggplot2)
+tree_raw_data_with_env_cleaned <- read_csv("G:/Rtestproject/data/tree_raw_data_with_env_cleaned.csv")
+
+
+
+dim(tree_raw_data_with_env_cleaned)
+
+head(tree_raw_data_with_env_cleaned)
+
+str(tree_raw_data_with_env_cleaned)
+
+##adding common name to the data frame
+REF_SPECIES <- read_csv("G:/Rtestproject/data/REF_SPECIES.csv")
+head(REF_SPECIES)
+
+commonname<-REF_SPECIES%>%
+  select(SPCD,COMMON_NAME,GENUS,SPECIES)
+
+tree_raw_common<-left_join(tree_raw_data_with_env_cleaned,commonname, by=c("spcd"="SPCD"),relationship = "many-to-many")
+head(tree_raw_common)
+
+
+##rows with na
+rows_with_na <- tree_raw_common[apply(is.na(tree_raw_common), 1, any), ]
+
+unique(rows_with_na$statename) ##states with na entries
+
+unique(rows_with_na$COMMON_NAME) ##species with na entries
+
+
+
+nrow(rows_with_na) ###683617 rows
+
+##remove na   ##683617 rows removed
+nona_tree_raw<-na.omit(tree_raw_common)
+nrow(nona_tree_raw)
+
+
+##summary
+summary(nona_tree_raw)
+
+
+##ggplot
+
+#Eastern US Tree Heights Distribution
+plot_tree_height<-ggplot(nona_tree_raw, aes(x = ht)) +
+  geom_histogram(binwidth = 5,color = "black") +
+  labs(title = "Eastern US Tree Heights Distribution")
+plot_tree_height
+
+#Eastern US Tree Diameter Distribution
+
+plot_tree_dia<-ggplot(nona_tree_raw,aes(x=dia))+
+  geom_histogram(binwidth = 0.2,color = "blue")+
+  labs(title = "Eastern US Tree Diameter Distribution")
+plot_tree_dia
+print(plot_tree_dia)
+
+#Eastern US Scatter Plot of Tree Height Diameter
+nona_tree_raw$common
+scatter_plot_ht_dia<-ggplot(nona_tree_raw, aes(x = ht, y = dia)) +
+  geom_point(color="red") +
+  labs(title = "Eastern US Scatter Plot of Tree Height Diameter")
+scatter_plot_ht_dia
+
+scatter_plot_ht_dia_facetwrap <- ggplot(nona_tree_raw, aes(x = ht, y = dia, color = common)) +
+  geom_point() +
+  facet_wrap(~common) +
+  labs(title = "Eastern US Scatter Plot of Tree Height vs. Diameter",
+       x = "Tree Height",
+       y = "Diameter")
+scatter_plot_ht_dia_facetwrap
+
+
+```
+
+```{r}
+#na distribution grouped by state
+#na ggplot grouped by state
+na_distribution_by_state <- tree_raw_common %>%
+  group_by(statename) %>%
+  select(spcd,common,dia,ht)%>%
+  summarize(across(everything(), ~ sum(is.na(.))))
+na_distribution_by_state
+
+ggplot(na_distribution_by_state, aes(x = statename)) +
+  geom_bar(aes(y = dia), stat = "identity", fill = "blue", alpha = 0.8) +
+  geom_bar(aes(y = ht), stat = "identity", fill = "green", alpha = 0.4) +
+  labs(title = "NA Distribution of 'dia' and 'ht' by State",
+       x = "State",
+       y = "Count of NA values") +
+  scale_fill_manual(values = c("blue", "green")) +
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r}
+#na distribution grouped by species
+#na ggplot grouped by species
+na_distribution_by_species <- tree_raw_common %>%
+  group_by(common) %>%
+  select(spcd,dia,ht)%>%
+  summarize(across(everything(), ~ sum(is.na(.))))
+na_distribution_by_species
+
+ggplot(na_distribution_by_species, aes(x = common)) +
+  geom_bar(aes(y = dia), stat = "identity", fill = "blue", alpha = 0.8) +
+  geom_bar(aes(y = ht), stat = "identity", fill = "green", alpha = 0.4) +
+  labs(title = "NA Distribution of 'dia' and 'ht' by Species",
+       x = "Species",
+       y = "Count of NA values") +
+  scale_fill_manual(values = c("blue", "green")) +
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r}
+## Calculate species richness (sr) at grid level
+
+fia <-read_csv("G:/Rtestproject/r-intro/tree data/tree_raw_data_with_env_cleaned.csv")
+View(tree_raw_data_with_env_cleaned)
+
+fia_df <- fia %>%
+  select(X, TREEcn, plt_cn, invyr, statecd, spcd, dia, ht, lat, long, common)
+
+fia_sf <- st_as_sf(fia_df, coords = c("long", "lat"), crs = 4326)
+fia_sf_albers <- st_transform(fia_sf, crs = "ESRI:102008")
+extent <- st_bbox(fia_sf_albers)
+grid <- st_make_grid(st_as_sfc(extent), crs = "ESRI:102008", cellsize = c(20000, 20000), square = TRUE)
+grid_sf <- st_sf(id = 1:length(grid), geometry = grid)
+overlaps <- st_join(fia_sf_albers, grid_sf)
+centroids_albers <- st_centroid(grid_sf$geometry)
+id1 <- unique(overlaps$id)
+centroids_albers <- st_centroid(grid_sf[grid_sf$id %in% id1,]$geometry)
+centroids_wgs84 <- st_transform(centroids_albers, crs = 4326)
+centroids_wgs84_coords <- st_coordinates(centroids_wgs84)
+gridid <- grid_sf[grid_sf$id %in% id1,]$id
+centroid_df <- data.frame(
+  GRIDID = id1,
+  centroid_long = centroids_wgs84_coords[,"X"],
+  centroid_lat = centroids_wgs84_coords[,"Y"]
+)
+fia_grid <- merge(overlaps, centroid_df, by.x = "id", by.y = "GRIDID", all.x = TRUE)
+fia_grid_df <- as.data.frame(fia_grid)
+fia_grid_df
+
+sp_rich<- fia_grid_df %>%
+  select(id, common,centroid_long, centroid_lat,spcd) %>%
+  group_by(id)%>%
+  summarise(uniquetreecount_id = n_distinct(spcd))
+  
+head(sp_rich)  
+View(sp_rich)
+final_sp_rich<-left_join(fia_grid_df,sp_rich,by=c("id"="id"))
+final_sp_rich
+
+
+
+sum(is.na(final_sp_rich))
+
+sel_col_sp_rich<-final_sp_rich%>%
+  select(id, common,spcd,centroid_long, centroid_lat,uniquetreecount_id)
+sel_col_sp_rich
+
+sum(is.na(sel_col_sp_rich)) ##0 
+
+cleaned_sp_rich<-na.omit(sel_col_sp_rich)
+head(cleaned_sp_rich)
+
+plot(cleaned_sp_rich$id,cleaned_sp_rich$uniquetreecount_id)
+```
+
+```{r}
+
+# 3. Calculate average sr aggregated at the latitudinal band
+###########
+min(cleaned_sp_rich$centroid_lat)
+max(cleaned_sp_rich$centroid_lat)
+?seq
+seq(from = 25, to = 50)
+seq(from = 25, to = 50, by = 1)
+myseq <- seq(from = 25, to = 50, by = 1)
+for (i in myseq){
+  print(i+1)
+}
+sr_bands <- data.frame(matrix(ncol = 2, nrow = length(myseq)))
+names(sr_bands) <- c("LatBands","SR")
+sr_bands
+
+for (i in 1:length(myseq)){
+  lat_min <- myseq[i] 
+  lat_max <- myseq[i] + 1
+  cleaned_sp_rich_subset <- cleaned_sp_rich%>%
+    filter(centroid_lat > lat_min & centroid_lat <= lat_max)
+  sr <- length(unique(cleaned_sp_rich_subset$common))
+  sr_bands[i,1] <- myseq[i]
+  sr_bands[i,2] <- sr
+}
+sr_bands
+
+library(ggplot2)
+
+ggplot(data = sr_bands, aes(x = LatBands, y = SR)) +
+  geom_point()
+
+
+# Bootstrapping function########
+#myiteration <- seq(from = 1, to = 5, by = 1)
+#for (i in myiteration){
+#print(i)
+#}
+bootstrap <- data.frame(matrix(ncol = 1001, nrow = length(myseq)))
+#names(bootstrap) <-c("LatBands","iteration1","iteration2","iteration3","iteration4","iteration5")
+bootstrap
+
+myseq <- seq(from = 25, to = 50, by = 0.5)
+
+
+
+library(dplyr)
+
+# Initialize the bootstrap data frame
+bootstrap <- data.frame(matrix(nrow = length(myseq), ncol = 1001))
+#names(bootstrap) <- c("LatBands", "iteration1", "iteration2", "iteration3", "iteration4", "iteration5")
+
+# Bootstrapping loop
+for (i in 1:length(myseq)) {
+  lat_min <- myseq[i] - 0.5
+  lat_max <- myseq[i] + 0.5
+  cleaned_sp_rich_subset <-cleaned_sp_rich%>%
+    filter(centroid_lat > lat_min & centroid_lat <= lat_max)
+  
+  # Store the latitude band
+  bootstrap[i, 1] <- myseq[i]
+  
+  # Perform 1000 bootstrapping iterations for the current latitude band
+  for (iteration in 2:1001) {
+    sample_200 <- sample(1:nrow(cleaned_sp_rich_subset), size = 200, replace = TRUE)
+    bootstrap_sample <- cleaned_sp_rich_subset[sample_200, ]
+    bootstrap_sr <- length(unique(bootstrap_sample$common))
+    bootstrap[i, iteration] <- bootstrap_sr
+  }
+}
+
+# Display the bootstrapped dataset
+print(bootstrap)
+head(bootstrap)
+```
+```{r}
+#write.csv(bootstrap, "bootsrapSR.csv")
+?sample
+
+
+###to initialize new dataset with mean and std
+
+
+# Generate my sequence of numbers
+myseq <- seq(from = 25, to = 50, by = 0.5)
+
+# Create an empty dataframe with column names
+Result1 <- data.frame(LatBands = numeric(length(myseq)),
+                     Mean = numeric(length(myseq)),
+                     std = numeric(length(myseq)))
+
+# Loop through rows of the 'bootstrap' dataframe
+for (i in seq_along(myseq)) {
+  row_data <- bootstrap[i, , drop = FALSE]
+  
+  # Calculate mean and standard deviation
+  means <- rowMeans(row_data, na.rm = TRUE)
+  stds <- sd(row_data, na.rm = TRUE)
+  
+  # Populate the 'Result1' dataframe
+  Result1[i, c("LatBands", "Mean", "std")] <- c(myseq[i], means, stds)
+}
+Result1
+
+bootplot<-ggplot(data = Result1, aes(x = LatBands, y = Mean)) +
+  geom_point()
+bootplot
+```
