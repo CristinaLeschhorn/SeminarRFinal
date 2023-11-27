@@ -58,6 +58,9 @@ species_richness1 <- species_rich %>%
   arrange(-richness)
 head(species_richness1)
 
+# data frame of the final species richness 
+species_richness_final <- as.data.frame(species_richness1)
+
 species_richness <- function(species) {
   df <- species_rich %>%
     filter(common == species) %>%
