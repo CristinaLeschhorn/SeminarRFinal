@@ -306,7 +306,21 @@ for (i in seq_along(myseq)) {
 }
 Result1
 
-bootplot<-ggplot(data = Result1, aes(x = LatBands, y = Mean)) +
-  geom_point()
-bootplot
+##Mean and Standard deviation plot
+
+boot_plot_mean_std<- ggplot(Result1, aes(x = LatBands)) +
+  geom_point(aes(y = Mean, color = "Mean"), size = 1, alpha = 1) +
+  geom_point(aes(y = std, color = "Standard Deviation"), size = 1, alpha = 1) +
+  labs(title = "Distribution of Species Richness Mean and Standard Deviation per latitude band after bootstrapping",
+       x = "Latitude Band",
+       y = "Mean") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  scale_color_manual(values = c("Mean" = "blue", "Standard Deviation" = "red")) +
+  guides(color = guide_legend(title = NULL), linetype = guide_legend(title = NULL))+
+  scale_y_continuous(
+    sec.axis = sec_axis(~., name = "Standard Deviation", labels = scales::number_format(scale = 1))
+  )
+  
+boot_plot_mean_std
 ```
